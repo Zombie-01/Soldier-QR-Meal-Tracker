@@ -16,6 +16,10 @@ export function Dashboard() {
   const [soldiers, setSoldiers] = useState<Soldier[]>([]);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const { signOut } = useAuth();
 
   const loadSoldiers = async () => {
@@ -51,9 +55,7 @@ export function Dashboard() {
   }, []);
 
   const handleManualReset = async () => {
-    if (!confirm('Бүх өгөгдлийг шинэчлэх үү? Энэ үйлдлийг буцаах боломжгүй.')) {
-      return;
-    }
+    if (!confirm('Бүх өгөгдлийг шинэчлэх үү? Энэ үйлдлийг буцаах боломжгүй.')) return;
 
     setResetting(true);
     try {
@@ -89,45 +91,51 @@ export function Dashboard() {
     }
   };
 
-  const getTotalMealsServed = () => {
-    return soldiers.reduce((sum, soldier) => sum + soldier.total_meals, 0);
-  };
+  const getTotalMealsServed = () => soldiers.reduce((sum, s) => sum + s.total_meals, 0);
 
   const getMealTypeLabel = (type: 'breakfast' | 'lunch' | 'dinner') => {
     switch (type) {
-      case 'breakfast':
-        return 'Өглөө';
-      case 'lunch':
-        return 'Өдөр';
-      case 'dinner':
-        return 'Орой';
+      case 'breakfast': return 'Өглөө';
+      case 'lunch': return 'Өдөр';
+      case 'dinner': return 'Орой';
     }
   };
 
   const currentMealType = getCurrentMealType();
 
+  // --- Search & Pagination ---
+  const filteredSoldiers = soldiers.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.soldier_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  const totalPages = Math.ceil(filteredSoldiers.length / itemsPerPage);
+  const paginatedSoldiers = filteredSoldiers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
-    <div className="min-h-screen ">
+    <div className="min-h-screen">
       <div className="container mx-auto p-4 max-w-7xl space-y-6">
+        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Хоолны хяналтын систем</h1>
             <p className="text-slate-600 mt-1">
               {currentMealType ? (
-                <>
-                  Одоогийн цаг: <Badge variant="default">{getMealTypeLabel(currentMealType)}</Badge>
-                </>
+                <>Одоогийн цаг: <Badge variant="default">{getMealTypeLabel(currentMealType)}</Badge></>
               ) : (
                 <span className="text-amber-600">Хоолны цаг биш</span>
               )}
             </p>
           </div>
           <Button onClick={handleSignOut} variant="outline">
-            <LogOut className="mr-2 h-4 w-4" />
-            Гарах
+            <LogOut className="mr-2 h-4 w-4" /> Гарах
           </Button>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -164,8 +172,22 @@ export function Dashboard() {
           </Card>
         </div>
 
+        {/* QR Scanner */}
         <QRScanner />
 
+        {/* Search Input */}
+        <div className="mb-4 flex items-center justify-between">
+          <input
+            type="text"
+            placeholder="Хайх нэр эсвэл ID..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="border rounded px-3 py-2 w-1/3"
+          />
+          <p className="text-sm text-muted-foreground">Нийт: {filteredSoldiers.length}</p>
+        </div>
+
+        {/* Soldiers Table */}
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -175,8 +197,7 @@ export function Dashboard() {
               </div>
               <div className="space-x-2">
                 <Button onClick={loadSoldiers} variant="outline" size="sm" disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Шинэчлэх
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Шинэчлэх
                 </Button>
                 <Button onClick={handleManualReset} variant="destructive" size="sm" disabled={resetting}>
                   {resetting ? 'Шинэчилж байна...' : 'Бүгдийг арилгах'}
@@ -187,10 +208,8 @@ export function Dashboard() {
           <CardContent>
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Ачааллаж байна...</div>
-            ) : soldiers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Өнөөдөр хоол идсэн цэрэг байхгүй байна
-              </div>
+            ) : paginatedSoldiers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Өнөөдөр хоол идсэн цэрэг байхгүй байна</div>
             ) : (
               <div className="rounded-md border">
                 <Table>
@@ -206,42 +225,21 @@ export function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {soldiers.map((soldier) => (
+                    {paginatedSoldiers.map((soldier) => (
                       <TableRow key={soldier.id}>
                         <TableCell className="font-medium">{soldier.name}</TableCell>
                         <TableCell className="text-muted-foreground">{soldier.soldier_id}</TableCell>
                         <TableCell className="text-center">
-                          {soldier.breakfast ? (
-                            <Badge variant="default" className="bg-green-600">
-                              ✓
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">-</Badge>
-                          )}
+                          {soldier.breakfast ? <Badge variant="default" className="bg-green-600">✓</Badge> : <Badge variant="outline">-</Badge>}
                         </TableCell>
                         <TableCell className="text-center">
-                          {soldier.lunch ? (
-                            <Badge variant="default" className="bg-green-600">
-                              ✓
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">-</Badge>
-                          )}
+                          {soldier.lunch ? <Badge variant="default" className="bg-green-600">✓</Badge> : <Badge variant="outline">-</Badge>}
                         </TableCell>
                         <TableCell className="text-center">
-                          {soldier.dinner ? (
-                            <Badge variant="default" className="bg-green-600">
-                              ✓
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">-</Badge>
-                          )}
+                          {soldier.dinner ? <Badge variant="default" className="bg-green-600">✓</Badge> : <Badge variant="outline">-</Badge>}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge
-                            variant={soldier.total_meals === 3 ? 'default' : 'secondary'}
-                            className={soldier.total_meals === 3 ? 'bg-blue-600' : ''}
-                          >
+                          <Badge variant={soldier.total_meals === 3 ? 'default' : 'secondary'} className={soldier.total_meals === 3 ? 'bg-blue-600' : ''}>
                             {soldier.total_meals}/3
                           </Badge>
                         </TableCell>
@@ -252,6 +250,29 @@ export function Dashboard() {
                     ))}
                   </TableBody>
                 </Table>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                  >
+                    Өмнөх
+                  </Button>
+
+                  <span className="text-sm">{currentPage} / {totalPages || 1}</span>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                  >
+                    Дараах
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
