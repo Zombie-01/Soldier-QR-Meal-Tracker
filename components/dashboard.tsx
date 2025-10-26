@@ -22,13 +22,20 @@ export function Dashboard() {
 
   const { signOut } = useAuth();
 
-  const loadSoldiers = async () => {
+  const loadSoldiers = async (search?: string) => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('soldiers')
         .select('*')
         .order('last_scan', { ascending: false });
 
+      // Server-side search
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,soldier_id.ilike.%${search}%`);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setSoldiers(data || []);
     } catch (error) {
@@ -45,7 +52,7 @@ export function Dashboard() {
     const channel = supabase
       .channel('soldiers-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'soldiers' }, () => {
-        loadSoldiers();
+        loadSoldiers(searchTerm);
       })
       .subscribe();
 
@@ -53,6 +60,11 @@ export function Dashboard() {
       channel.unsubscribe();
     };
   }, []);
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    loadSoldiers(searchTerm);
+  };
 
   const handleManualReset = async () => {
     if (!confirm('Бүх өгөгдлийг шинэчлэх үү? Энэ үйлдлийг буцаах боломжгүй.')) return;
@@ -73,7 +85,7 @@ export function Dashboard() {
       if (!response.ok) throw new Error('Reset failed');
 
       toast.success('Амжилттай шинэчлэгдлээ');
-      await loadSoldiers();
+      await loadSoldiers(searchTerm);
     } catch (error) {
       console.error('Reset error:', error);
       toast.error('Шинэчлэх алдаа гарлаа');
@@ -103,14 +115,9 @@ export function Dashboard() {
 
   const currentMealType = getCurrentMealType();
 
-  // --- Search & Pagination ---
-  const filteredSoldiers = soldiers.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.soldier_id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const totalPages = Math.ceil(filteredSoldiers.length / itemsPerPage);
-  const paginatedSoldiers = filteredSoldiers.slice(
+  // Pagination logic
+  const totalPages = Math.ceil(soldiers.length / itemsPerPage);
+  const paginatedSoldiers = soldiers.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -176,15 +183,15 @@ export function Dashboard() {
         <QRScanner />
 
         {/* Search Input */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center space-x-2">
           <input
             type="text"
             placeholder="Хайх нэр эсвэл ID..."
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="border rounded px-3 py-2 w-1/3"
           />
-          <p className="text-sm text-muted-foreground">Нийт: {filteredSoldiers.length}</p>
+          <Button onClick={handleSearch} variant="outline">Хайх</Button>
         </div>
 
         {/* Soldiers Table */}
@@ -196,7 +203,7 @@ export function Dashboard() {
                 <CardDescription>Бүх цэргийн хоолны бүртгэл</CardDescription>
               </div>
               <div className="space-x-2">
-                <Button onClick={loadSoldiers} variant="outline" size="sm" disabled={loading}>
+                <Button onClick={() => loadSoldiers(searchTerm)} variant="outline" size="sm" disabled={loading}>
                   <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Шинэчлэх
                 </Button>
                 <Button onClick={handleManualReset} variant="destructive" size="sm" disabled={resetting}>
