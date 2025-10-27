@@ -28,7 +28,7 @@ export default function RootLayout({
               className="absolute top-1/2 left-1/2 max-h-[80vh] -translate-x-1/2 -translate-y-1/2 object-contain"
             />
 
-          <div className="absolute inset-0 bg-white/40" />
+          <div className="absolute inset-0 bg-white/10" />
         </div>
 
 
